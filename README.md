@@ -37,8 +37,8 @@ not block for the full duration of a long workflow.
 
 Two MCP tools are exposed:
 
-1. **`start_research`** — starts a Durable orchestration (which fans out to multiple data sources in
-   parallel and aggregates), then **awaits completion up to a short budget** (~20s, configurable).
+1. **`start_research`** — starts a Durable orchestration (which queries several data sources in
+   sequence and aggregates), then **awaits completion up to a short budget** (~20s, configurable).
    - If the workflow finishes **within budget** → the **result is returned inline**. The second tool
      is never needed. This is the common case and it removes any "did the agent remember to poll?"
      risk.
@@ -65,10 +65,10 @@ agent can't poll without first starting), the "running" response carries `poll_a
 | Path | What it is |
 |------|------------|
 | [`src/ResearchTools.cs`](src/ResearchTools.cs) | The two MCP tools and the shared status-mapping helper. |
-| [`src/ResearchOrchestrator.cs`](src/ResearchOrchestrator.cs) | Durable fan-out/fan-in orchestration + simulated source activities. |
+| [`src/ResearchOrchestrator.cs`](src/ResearchOrchestrator.cs) | Durable orchestration + simulated source activities. |
 | [`src/Program.cs`](src/Program.cs) | Isolated-worker host setup. |
 | [`src/host.json`](src/host.json) | Host config, including the MCP server name/instructions. |
-| [`test-client.py`](test-client.py) | A tiny dependency-free MCP client to exercise the tools. |
+| [`.vscode/mcp.json`](.vscode/mcp.json) | Registers the local MCP server for VS Code. |
 
 ## Prerequisites
 
@@ -76,8 +76,8 @@ agent can't poll without first starting), the "running" response carries `poll_a
 - [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
 - [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) storage emulator
   (Durable Functions needs blob/queue/table storage locally). Install with `npm install -g azurite`.
-- Python 3 (only to run the included `test-client.py`), **or** any MCP client (e.g. VS Code, MCP
-  Inspector).
+- [VS Code](https://code.visualstudio.com/) with [GitHub Copilot](https://code.visualstudio.com/docs/copilot/overview)
+  (agent mode) to call the tools as an MCP client.
 
 ## Run it locally
 
@@ -109,17 +109,14 @@ Functions:
 > The MCP endpoint uses the Streamable HTTP transport at
 > `http://localhost:7071/runtime/webhooks/mcp`.
 
-**3. Call the tools.** Use the included client (no dependencies):
+**3. Connect from VS Code.** [`.vscode/mcp.json`](.vscode/mcp.json) registers the local server.
+Open the repo in VS Code, open `.vscode/mcp.json`, and click **Start** on the `local-research-mcp`
+server. Then, in a Copilot **agent mode** chat, ask it to research a topic, e.g.:
 
-```bash
-# Fast path: the workflow finishes within the wait budget -> result returned inline
-python3 test-client.py start_research '{"topic": "Contoso Ltd"}'
-```
+> Research "Contoso Ltd" for me.
 
-```jsonc
-// -> status "completed", result returned directly; no polling needed
-{ "Status": "completed", "WorkflowId": "…", "Result": "# Research report: Contoso Ltd\n\n- …" }
-```
+The agent calls `start_research`. With the defaults, the workflow finishes within the wait budget and
+the result comes back **inline** (status `completed`) — no polling needed.
 
 ### Try the poll path
 
@@ -131,40 +128,17 @@ cd src
 ResearchWaitBudgetSeconds=2 ResearchSourceDelaySeconds=5 dotnet run
 ```
 
-Then:
-
-```bash
-python3 test-client.py start_research '{"topic": "Fabrikam"}'
-```
-
-```jsonc
-// -> budget expired, so you get a handle + instructions instead of a result
-{ "Status": "running", "WorkflowId": "fab36ee6-…", "PollAfterSeconds": 5,
-  "Next": "Call get_research_result with workflow_id \"fab36ee6-…\" in about 5 seconds." }
-```
-
-Poll with the returned id (it returns `running` until done, then `completed`):
-
-```bash
-python3 test-client.py get_research_result '{"workflow_id": "fab36ee6-…"}'
-```
-
-```jsonc
-{ "Status": "completed", "WorkflowId": "fab36ee6-…", "Result": "# Research report: Fabrikam\n…" }
-```
-
-### Use it from an MCP client (VS Code)
-
-[`.vscode/mcp.json`](.vscode/mcp.json) registers the local server. Open it in VS Code and start the
-`local-research-mcp` server, then ask an agent to research a topic — it will call `start_research`
-and, if needed, `get_research_result`.
+Now ask the agent to research a topic again. This time `start_research` hits its 2s budget before the
+workflow finishes, so it returns status `running` with a `workflow_id` and a `next` instruction. The
+agent then calls `get_research_result` with that id — returning `running` until the work completes,
+then `completed` with the report.
 
 ## Configuration
 
 | Setting | Default | Purpose |
 |---------|---------|---------|
 | `ResearchWaitBudgetSeconds` | `20` | How long `start_research` blocks waiting for the workflow before returning a poll handle. Keep it **under the client's tool-call timeout**, not the Functions timeout. |
-| `ResearchSourceDelaySeconds` | `3` | Simulated per-source latency, so you can demonstrate both the inline and poll paths. |
+| `ResearchSourceDelaySeconds` | `3` | Simulated per-source latency. The sources run sequentially, so the total workflow time is roughly this value times the number of sources. Raise it (or lower the budget) to demonstrate the poll path. |
 
 Both are read from app settings / environment (see [`src/local.settings.json`](src/local.settings.json)).
 
@@ -209,12 +183,9 @@ or canceled workflow isn't really an "error", so it isn't *labeled* one at the h
 
 ## A gotcha worth knowing
 
-The MCP tool-argument binding **canonicalizes GUID-shaped strings to the dashed "D" format** before
-your handler sees them. Durable's *default* instance id, however, is the **dash-less "N" format** —
-so naively round-tripping the default id through `start_research` → `get_research_result` would fail
-the lookup (an exact string match in Durable). This sample avoids that by **explicitly creating the
-orchestration with a dashed-GUID instance id** (`Guid.NewGuid().ToString()`) so the id it hands out
-matches what the binding emits on the way back. See the comment in
+The MCP tool-argument binding returns a **dashed GUID** to `get_research_result`. Durable's *default*
+instance id is the dash-less form, so the default wouldn't match on lookup. This sample creates the
+orchestration with `Guid.NewGuid().ToString()` (dashed) so the ids match. See the comment in
 [`src/ResearchTools.cs`](src/ResearchTools.cs).
 
 ## Contributing

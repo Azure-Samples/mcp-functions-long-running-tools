@@ -47,12 +47,9 @@ public class ResearchTools
         [McpToolProperty("topic", "The subject to research.", isRequired: true)] string topic,
         [DurableClient] DurableTaskClient durableClient)
     {
-        // Use an explicit, dashed-GUID instance id. The MCP tool-argument binding canonicalizes
-        // GUID-shaped strings to dashed "D" format on the way back into get_research_result, so the
-        // id we hand out must already be in that exact form -- otherwise the poll lookup (an exact
-        // string match in Durable) would miss. Durable's *default* instance id is the dash-less "N"
-        // format, which would not round-trip. See README "A gotcha worth knowing".
-        string instanceId = Guid.NewGuid().ToString(); // dashed "D" format
+        // The MCP binding returns a dashed GUID to get_research_result, so we create the instance
+        // with a dashed-GUID id (ToString's "D" format) so the ids match on lookup.
+        string instanceId = Guid.NewGuid().ToString();
         await durableClient.ScheduleNewOrchestrationInstanceAsync(
             nameof(ResearchOrchestrator.RunOrchestrator), topic,
             new StartOrchestrationOptions(instanceId));

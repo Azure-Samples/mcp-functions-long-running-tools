@@ -8,18 +8,19 @@ namespace ResearchMcp;
 /// <summary>
 /// The Durable orchestration that does the actual long-running work.
 ///
-/// This is fan-out/fan-in -- the one thing a single stateless MCP tool function can't do well.
-/// It dispatches several "data source" activities IN PARALLEL (Task.WhenAll) and aggregates the
-/// results. Each source is slow on its own; sequentially they'd blow the client timeout, but the
-/// orchestration runs them concurrently with Durable's retry/reliability on top.
+/// It calls several "data source" activities in sequence and aggregates the results. Each source is
+/// slow on its own, so the total easily exceeds a client's tool-call timeout -- which is exactly the
+/// long-running case this sample addresses. Durable runs the steps reliably (with checkpointing and
+/// retry support) regardless of how long they take.
 ///
 /// In a real sample each activity would use a binding/integration that MCP authors underuse, e.g.
 /// Azure AI Search, Cosmos DB, Blob storage, a web search API, or Azure OpenAI for summarization.
 /// Here they are simulated with delays so the sample runs without external dependencies.
 ///
 /// Tip: set the app setting/env var ResearchSourceDelaySeconds to control how long each source
-/// takes. Small values (default 3) finish within the wait budget and return inline; large values
-/// (e.g. 30) exceed the budget so you can exercise the poll path.
+/// takes. Because the steps run sequentially, the total is roughly the per-source delay times the
+/// number of sources. Small values finish within the wait budget and return inline; large values
+/// exceed the budget so you can exercise the poll path.
 /// </summary>
 public static class ResearchOrchestrator
 {
@@ -33,17 +34,14 @@ public static class ResearchOrchestrator
         ILogger logger = context.CreateReplaySafeLogger(nameof(ResearchOrchestrator));
         logger.LogInformation("Orchestrating research for '{Topic}'", topic);
 
-        // Fan out: kick off every source in parallel.
-        var tasks = new List<Task<string>>
+        // Query each source in sequence, collecting findings as we go.
+        var findings = new List<string>
         {
-            context.CallActivityAsync<string>(nameof(SearchInternalDocs), topic),
-            context.CallActivityAsync<string>(nameof(SearchWeb), topic),
-            context.CallActivityAsync<string>(nameof(LookupFinancials), topic),
-            context.CallActivityAsync<string>(nameof(LookupCrmHistory), topic),
+            await context.CallActivityAsync<string>(nameof(SearchInternalDocs), topic),
+            await context.CallActivityAsync<string>(nameof(SearchWeb), topic),
+            await context.CallActivityAsync<string>(nameof(LookupFinancials), topic),
+            await context.CallActivityAsync<string>(nameof(LookupCrmHistory), topic),
         };
-
-        // Fan in: wait for all of them.
-        string[] findings = await Task.WhenAll(tasks);
 
         // Aggregate (in a real sample, summarize via Azure OpenAI here).
         var report = new StringBuilder();
