@@ -151,12 +151,11 @@ sibling fields so nothing is lost:
 |----------|---------|-------------------|
 | `completed` | Done; `result` holds the report. | Use the result. |
 | `running` | Still in flight (budget expired). | Wait `poll_after_seconds`, call `get_research_result`. |
-| `failed` | Terminal: errored, terminated, or canceled. `reason` + `error` give detail. | Stop polling; surface the error; optionally start over. |
+| `failed` | Terminal: errored or terminated. `reason` + `error` give detail. | Stop polling; surface the error; optionally start over. |
 | `not_found` | No workflow for that id (bad/expired id). | Don't poll; start a new workflow. |
 
-`Failed`, `Terminated`, and `Canceled` Durable states all map to `status: "failed"` because they
-drive the **same** agent action; the precise cause is preserved in `reason`
-(`error` / `terminated` / `canceled`).
+`Failed` and `Terminated` Durable states both map to `status: "failed"` because they drive the
+**same** agent action; the precise cause is preserved in `reason` (`error` / `terminated`).
 
 ## Q&A
 
@@ -174,12 +173,12 @@ aggressive clients, and rely on the poll fallback for anything longer. `notifica
 extend the window on clients that honor it, but it's optional and client-dependent, so it's left out
 here for clarity.
 
-**Q: What happens if the orchestration *fails* — and why isn't `status` split into failed/terminated/canceled?**
-`status` exists to **direct the agent's behavior**, not to mirror Durable's enum. `Failed`,
-`Terminated`, and `Canceled` all lead to the same next action — stop polling, surface what happened,
-likely start fresh — so they share `status: "failed"`. To avoid losing information, the precise
-terminal state is preserved in a separate `reason` field plus a human-readable `error`. A terminated
-or canceled workflow isn't really an "error", so it isn't *labeled* one at the headline.
+**Q: What happens if the orchestration *fails* — and why isn't `status` split into failed/terminated?**
+`status` exists to **direct the agent's behavior**, not to mirror Durable's enum. `Failed` and
+`Terminated` both lead to the same next action — stop polling, surface what happened, likely start
+fresh — so they share `status: "failed"`. To avoid losing information, the precise terminal state is
+preserved in a separate `reason` field plus a human-readable `error`. A terminated workflow isn't
+really an "error", so it isn't *labeled* one at the headline.
 
 ## A gotcha worth knowing
 

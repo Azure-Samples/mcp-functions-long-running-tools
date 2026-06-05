@@ -123,10 +123,10 @@ public class ResearchTools
     /// { completed | failed | running } contract, shared by the wait path and the poll path.
     ///
     /// "status" is a BEHAVIORAL signal: it tells the agent what to do (use the result / poll again /
-    /// stop and likely start over). Failed, Terminated, and Canceled all drive the same action, so
-    /// they share status "failed". To avoid losing information, the precise terminal state is
-    /// preserved in "reason", and a human-readable detail in "error". "running" means ONLY the
-    /// non-terminal states, so the agent never polls a workflow that is already finished.
+    /// stop and likely start over). Failed and Terminated both drive the same action, so they share
+    /// status "failed". To avoid losing information, the precise terminal state is preserved in
+    /// "reason", and a human-readable detail in "error". "running" means ONLY the non-terminal
+    /// states, so the agent never polls a workflow that is already finished.
     /// </summary>
     private static ResearchResult ToResult(OrchestrationMetadata metadata) =>
         metadata.RuntimeStatus switch
@@ -135,18 +135,10 @@ public class ResearchTools
                 "completed", metadata.InstanceId, Result: metadata.ReadOutputAs<string>()),
 
             OrchestrationRuntimeStatus.Failed
-            or OrchestrationRuntimeStatus.Terminated
-#pragma warning disable CS0618 // Canceled exists for compatibility; included for defensive completeness.
-            or OrchestrationRuntimeStatus.Canceled => new ResearchResult(
+            or OrchestrationRuntimeStatus.Terminated => new ResearchResult(
                 "failed", metadata.InstanceId,
-                Reason: metadata.RuntimeStatus switch
-                {
-                    OrchestrationRuntimeStatus.Failed => "error",
-                    OrchestrationRuntimeStatus.Terminated => "terminated",
-                    _ => "canceled"
-                },
+                Reason: metadata.RuntimeStatus == OrchestrationRuntimeStatus.Failed ? "error" : "terminated",
                 Error: DescribeFailure(metadata)),
-#pragma warning restore CS0618
 
             // Running / Pending / Suspended / ContinuedAsNew -> still in flight.
             _ => new ResearchResult(
@@ -157,26 +149,16 @@ public class ResearchTools
         };
 
     /// <summary>
-    /// Pulls a human-readable detail per terminal state. The reason lives in a DIFFERENT place
-    /// depending on how the orchestration ended, and none is guaranteed to be populated:
+    /// Pulls a human-readable detail for a failed/terminated workflow. The detail lives in a
+    /// different place depending on how it ended, and neither is guaranteed to be populated:
     ///   - Failed     -> FailureDetails.ErrorMessage
-    ///   - Terminated -> the terminate reason is stored as the instance output
-    ///   - Canceled   -> usually no detail
+    ///   - Terminated -> the terminate reason, stored as the instance output
     /// Each branch falls back to a generic message so we never assume a property is set.
     /// </summary>
     private static string DescribeFailure(OrchestrationMetadata metadata) =>
-#pragma warning disable CS0618 // Canceled exists for compatibility; included for defensive completeness.
-        metadata.RuntimeStatus switch
-        {
-            OrchestrationRuntimeStatus.Failed =>
-                metadata.FailureDetails?.ErrorMessage ?? "Orchestration failed.",
-            OrchestrationRuntimeStatus.Terminated =>
-                SafeOutput(metadata) ?? "Orchestration was terminated.",
-            OrchestrationRuntimeStatus.Canceled =>
-                SafeOutput(metadata) ?? "Orchestration was canceled.",
-            _ => metadata.RuntimeStatus.ToString()
-        };
-#pragma warning restore CS0618
+        metadata.RuntimeStatus == OrchestrationRuntimeStatus.Failed
+            ? metadata.FailureDetails?.ErrorMessage ?? "Orchestration failed."
+            : SafeOutput(metadata) ?? "Orchestration was terminated.";
 
     private static string? SafeOutput(OrchestrationMetadata metadata)
     {
@@ -197,7 +179,7 @@ public class ResearchTools
 /// <summary>
 /// The closed contract returned to the MCP client. Null fields are omitted from the JSON.
 /// "status" drives agent behavior; "reason" preserves the precise terminal cause when status is
-/// "failed" (error | terminated | canceled) so no information is lost.
+/// "failed" (error | terminated) so no information is lost.
 /// </summary>
 public record ResearchResult(
     string Status,
