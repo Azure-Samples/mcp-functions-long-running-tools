@@ -1,0 +1,18 @@
+{
+  "version": "2.0",
+  "logging": {
+    "applicationInsights": {
+      "samplingSettings": {
+        "isEnabled": true,
+        "excludedTypes": "Request"
+      }
+    }
+  },
+  "extensions": {
+    "mcp": {
+      "instructions": "Use start_research to begin researching a topic. If it returns status 'running', wait poll_after_seconds and call get_research_result with the returned workflow_id.",
+      "serverName": "ResearchMcpServer",
+      "serverVersion": "1.0.0"
+    }
+  }
+}

@@ -427,3 +427,11 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+
+# Azurite storage emulator
+.azurite/
+__azurite_db*__.json
+__blobstorage__/
+__queuestorage__/
+__tablestorage__/
