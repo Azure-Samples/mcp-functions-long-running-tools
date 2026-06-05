@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "local-mining-mcp": {
+      "type": "http",
+      "url": "http://localhost:7071/runtime/webhooks/mcp"
+    }
+  }
+}

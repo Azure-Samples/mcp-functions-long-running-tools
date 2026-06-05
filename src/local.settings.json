@@ -3,7 +3,7 @@
   "Values": {
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
-    "ResearchWaitBudgetSeconds": "20",
-    "ResearchSourceDelaySeconds": "3"
+    "WaitBudgetSeconds": "20",
+    "MiningDifficulty": "21"
   }
 }

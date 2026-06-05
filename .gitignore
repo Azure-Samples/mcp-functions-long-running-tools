@@ -435,3 +435,6 @@ __azurite_db*__.json
 __blobstorage__/
 __queuestorage__/
 __tablestorage__/
+
+# Keep the MCP server config for the sample
+!.vscode/mcp.json

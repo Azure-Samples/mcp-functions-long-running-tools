@@ -5,7 +5,7 @@
     <OutputType>Exe</OutputType>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <RootNamespace>ResearchMcp</RootNamespace>
+    <RootNamespace>LongRunningMcp</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

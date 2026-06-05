@@ -7,55 +7,64 @@ using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
-namespace ResearchMcp;
+namespace LongRunningMcp;
 
 /// <summary>
 /// Two MCP tools that implement the "budgeted single call + poll fallback" pattern for
-/// long-running work, backed by a Durable Functions orchestration.
+/// long-running work, backed by a Durable Functions orchestration (a proof-of-work miner).
 ///
 /// This is a WORKAROUND until the MCP Task extension (SEP-2663) is supported by the Functions
 /// MCP trigger. Once tasks are native, the server can return a task handle and the client polls
 /// tasks/get via the SDK, making this two-tool pattern unnecessary.
 /// </summary>
-public class ResearchTools
+public class MiningTools
 {
-    private readonly ILogger<ResearchTools> _logger;
+    private readonly ILogger<MiningTools> _logger;
     private readonly int _waitBudgetSeconds;
+    private readonly int _defaultDifficulty;
 
-    public ResearchTools(ILogger<ResearchTools> logger, IConfiguration config)
+    public MiningTools(ILogger<MiningTools> logger, IConfiguration config)
     {
         _logger = logger;
 
-        // The wait budget is configurable, NOT a hard-coded constant. The right value is bounded by
-        // the *client* tool-call timeout (non-standard, often ~30-60s), not the Functions host
-        // timeout. Default conservatively to stay under aggressive clients.
-        _waitBudgetSeconds = config.GetValue("ResearchWaitBudgetSeconds", 20);
+        // The wait budget is bounded by the *client* tool-call timeout (non-standard, often ~30-60s),
+        // not the Functions host timeout. Default conservatively to stay under aggressive clients.
+        _waitBudgetSeconds = config.GetValue("WaitBudgetSeconds", 20);
+
+        // Default mining difficulty (leading zero bits). Higher = longer. Callers can override it
+        // per request via the tool's optional "difficulty" argument.
+        _defaultDifficulty = config.GetValue("MiningDifficulty", 21);
     }
 
     /// <summary>
-    /// Starts the research orchestration and awaits it up to a short budget.
-    /// Fast workflows return their result inline (the poll tool is never needed);
-    /// slow workflows return a workflow_id handle and an instruction to poll.
+    /// Starts the mining orchestration and awaits it up to a short budget.
+    /// Quick jobs return their result inline (the poll tool is never needed);
+    /// long jobs return a workflow_id handle and an instruction to poll.
     /// </summary>
-    [Function(nameof(StartResearch))]
-    public async Task<string> StartResearch(
-        [McpToolTrigger("start_research",
-            "Researches a topic by gathering information from multiple sources in parallel. "
-            + "Returns the result directly if it finishes quickly; otherwise returns a workflow_id "
-            + "to poll with get_research_result.")]
+    [Function(nameof(StartMining))]
+    public async Task<string> StartMining(
+        [McpToolTrigger("start_mining",
+            "Mines a short chain of proof-of-work blocks. Returns the result directly if it finishes "
+            + "quickly; otherwise returns a workflow_id to poll with get_mining_result. Higher "
+            + "difficulty takes longer.")]
             ToolInvocationContext context,
-        [McpToolProperty("topic", "The subject to research.", isRequired: true)] string topic,
+        [McpToolProperty("difficulty",
+            "Optional mining difficulty (leading zero bits). Higher = longer. Omit to use the default.")]
+            string? difficulty,
         [DurableClient] DurableTaskClient durableClient)
     {
-        // The MCP binding returns a dashed GUID to get_research_result, so we create the instance
+        // The argument is optional; when omitted (or not a positive int) fall back to the default.
+        int effectiveDifficulty = int.TryParse(difficulty, out int d) && d > 0 ? d : _defaultDifficulty;
+
+        // The MCP binding returns a dashed GUID to get_mining_result, so we create the instance
         // with a dashed-GUID id (ToString's "D" format) so the ids match on lookup.
         string instanceId = Guid.NewGuid().ToString();
         await durableClient.ScheduleNewOrchestrationInstanceAsync(
-            nameof(ResearchOrchestrator.RunOrchestrator), topic,
+            nameof(MiningOrchestrator.RunOrchestrator), effectiveDifficulty,
             new StartOrchestrationOptions(instanceId));
 
-        _logger.LogInformation("Started research orchestration {InstanceId} for topic '{Topic}'",
-            instanceId, topic);
+        _logger.LogInformation("Started mining orchestration {InstanceId} at difficulty {Difficulty}",
+            instanceId, effectiveDifficulty);
 
         // Budgeted wait: WaitForInstanceCompletionAsync blocks until the orchestration reaches a
         // terminal state OR the CancellationToken fires. We impose the budget via CancelAfter.
@@ -73,29 +82,29 @@ public class ResearchTools
             // Budget expired. The orchestration is still running in Durable storage and is NOT
             // lost. Hand back a poll handle plus explicit next-step guidance for the agent.
             _logger.LogInformation(
-                "Research {InstanceId} exceeded {Budget}s budget; returning poll handle.",
+                "Mining {InstanceId} exceeded {Budget}s budget; returning poll handle.",
                 instanceId, _waitBudgetSeconds);
 
-            return Serialize(new ResearchResult(
+            return Serialize(new MiningResult(
                 Status: "running",
                 WorkflowId: instanceId,
                 PollAfterSeconds: 5,
-                Next: $"Call get_research_result with workflow_id \"{instanceId}\" in about 5 seconds."));
+                Next: $"Call get_mining_result with workflow_id \"{instanceId}\" in about 5 seconds."));
         }
     }
 
     /// <summary>
-    /// Polls a previously started research workflow by its workflow_id.
+    /// Polls a previously started mining workflow by its workflow_id.
     /// </summary>
-    [Function(nameof(GetResearchResult))]
-    public async Task<string> GetResearchResult(
-        [McpToolTrigger("get_research_result",
-            "Gets the status/result of a research workflow started by start_research. "
+    [Function(nameof(GetMiningResult))]
+    public async Task<string> GetMiningResult(
+        [McpToolTrigger("get_mining_result",
+            "Gets the status/result of a mining workflow started by start_mining. "
             + "If status is 'running', wait poll_after_seconds and call again.")]
             ToolInvocationContext context,
-        // workflow_id is REQUIRED -> the schema-level dependency that forces start_research to have
+        // workflow_id is REQUIRED -> the schema-level dependency that forces start_mining to have
         // been called first. This makes tool ordering robust without relying on the agent.
-        [McpToolProperty("workflow_id", "The workflow_id returned by start_research.", isRequired: true)]
+        [McpToolProperty("workflow_id", "The workflow_id returned by start_mining.", isRequired: true)]
             string workflowId,
         [DurableClient] DurableTaskClient durableClient)
     {
@@ -106,8 +115,8 @@ public class ResearchTools
         {
             // Distinct from "failed": the work didn't error, the handle is unknown (bad id, or the
             // instance history was purged after its retention window). The agent's right move is to
-            // start a fresh orchestration, not to keep polling -- so it gets its own status.
-            return Serialize(new ResearchResult(
+            // start a fresh workflow, not to keep polling -- so it gets its own status.
+            return Serialize(new MiningResult(
                 Status: "not_found",
                 WorkflowId: workflowId,
                 Error: $"No workflow found with id \"{workflowId}\"."));
@@ -128,24 +137,24 @@ public class ResearchTools
     /// "reason", and a human-readable detail in "error". "running" means ONLY the non-terminal
     /// states, so the agent never polls a workflow that is already finished.
     /// </summary>
-    private static ResearchResult ToResult(OrchestrationMetadata metadata) =>
+    private static MiningResult ToResult(OrchestrationMetadata metadata) =>
         metadata.RuntimeStatus switch
         {
-            OrchestrationRuntimeStatus.Completed => new ResearchResult(
+            OrchestrationRuntimeStatus.Completed => new MiningResult(
                 "completed", metadata.InstanceId, Result: metadata.ReadOutputAs<string>()),
 
             OrchestrationRuntimeStatus.Failed
-            or OrchestrationRuntimeStatus.Terminated => new ResearchResult(
+            or OrchestrationRuntimeStatus.Terminated => new MiningResult(
                 "failed", metadata.InstanceId,
                 Reason: metadata.RuntimeStatus == OrchestrationRuntimeStatus.Failed ? "error" : "terminated",
                 Error: DescribeFailure(metadata)),
 
             // Running / Pending / Suspended / ContinuedAsNew -> still in flight.
-            _ => new ResearchResult(
+            _ => new MiningResult(
                 Status: "running",
                 WorkflowId: metadata.InstanceId,
                 PollAfterSeconds: 5,
-                Next: $"Call get_research_result with workflow_id \"{metadata.InstanceId}\" in about 5 seconds.")
+                Next: $"Call get_mining_result with workflow_id \"{metadata.InstanceId}\" in about 5 seconds.")
         };
 
     /// <summary>
@@ -173,7 +182,7 @@ public class ResearchTools
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    private static string Serialize(ResearchResult result) => JsonSerializer.Serialize(result, JsonOpts);
+    private static string Serialize(MiningResult result) => JsonSerializer.Serialize(result, JsonOpts);
 }
 
 /// <summary>
@@ -181,7 +190,7 @@ public class ResearchTools
 /// "status" drives agent behavior; "reason" preserves the precise terminal cause when status is
 /// "failed" (error | terminated) so no information is lost.
 /// </summary>
-public record ResearchResult(
+public record MiningResult(
     string Status,
     string WorkflowId,
     string? Result = null,

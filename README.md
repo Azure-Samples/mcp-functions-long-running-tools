@@ -37,15 +37,15 @@ not block for the full duration of a long workflow.
 
 Two MCP tools are exposed:
 
-1. **`start_research`** — starts a Durable orchestration (which queries several data sources in
-   sequence and aggregates), then **awaits completion up to a short budget** (~20s, configurable).
+1. **`start_mining`** — starts a Durable orchestration (which mines a short chain of proof-of-work
+   blocks), then **awaits completion up to a short budget** (~20s, configurable).
    - If the workflow finishes **within budget** → the **result is returned inline**. The second tool
      is never needed. This is the common case and it removes any "did the agent remember to poll?"
      risk.
    - If the budget expires → a **handle** (`workflow_id`) is returned plus an explicit instruction to
      poll. The orchestration keeps running in Durable storage regardless of the client connection.
 
-2. **`get_research_result`** — takes the `workflow_id` (a **required** parameter) and returns the
+2. **`get_mining_result`** — takes the `workflow_id` (a **required** parameter) and returns the
    current state: `completed` (with result), `failed` (with error), `running` (poll again), or
    `not_found` (unknown/expired id).
 
@@ -55,17 +55,30 @@ agent can't poll without first starting), the "running" response carries `poll_a
 
 > **Known weakness.** Even so, the poll path still relies on the **LLM correctly remembering — and
 > not hallucinating — the `workflow_id`** it was handed. If the model garbles or invents an id, the
-> poll lands on the wrong instance or none at all (which is why `get_research_result` returns
+> poll lands on the wrong instance or none at all (which is why `get_mining_result` returns
 > `not_found` rather than guessing). The budgeted wait mitigates this by resolving most calls without
 > a second hop, but it's the core reason the MCP Task extension — where the SDK, not the model,
 > carries the handle — is the better long-term answer.
+
+## The example workflow: a proof-of-work miner
+
+The long-running work in this sample is a small, dependency-free **proof-of-work miner**. The
+orchestration mines a short chain of blocks; each block needs a SHA-256 hash with at least
+`difficulty` leading zero bits (found by trying nonces `0, 1, 2, …`), and each block includes the
+previous block's hash — so the blocks form a chain. That makes it a natural example of Durable's
+**function-chaining** pattern, where each step depends on the output of the one before it.
+
+It's real CPU work — no `Task.Delay`, no external services — and its duration is controlled by a
+single knob, **`difficulty`**: each extra bit roughly **doubles** the expected number of hashes, so
+higher difficulty takes longer. That one dial is what lets you demonstrate both the **inline** path
+(quick) and the **poll** path (slow).
 
 ## What's in the box
 
 | Path | What it is |
 |------|------------|
-| [`src/ResearchTools.cs`](src/ResearchTools.cs) | The two MCP tools and the shared status-mapping helper. |
-| [`src/ResearchOrchestrator.cs`](src/ResearchOrchestrator.cs) | Durable orchestration + simulated source activities. |
+| [`src/MiningTools.cs`](src/MiningTools.cs) | The two MCP tools and the shared status-mapping helper. |
+| [`src/MiningOrchestrator.cs`](src/MiningOrchestrator.cs) | The Durable proof-of-work orchestration. |
 | [`src/Program.cs`](src/Program.cs) | Isolated-worker host setup. |
 | [`src/host.json`](src/host.json) | Host config, including the MCP server name/instructions. |
 | [`.vscode/mcp.json`](.vscode/mcp.json) | Registers the local MCP server for VS Code. |
@@ -100,8 +113,8 @@ You should see both MCP tools register and the endpoint print:
 MCP server endpoint: http://localhost:7071/runtime/webhooks/mcp
 
 Functions:
-    StartResearch: mcpToolTrigger
-    GetResearchResult: mcpToolTrigger
+    StartMining: mcpToolTrigger
+    GetMiningResult: mcpToolTrigger
     RunOrchestrator: orchestrationTrigger
     ...
 ```
@@ -110,37 +123,36 @@ Functions:
 > `http://localhost:7071/runtime/webhooks/mcp`.
 
 **3. Connect from VS Code.** [`.vscode/mcp.json`](.vscode/mcp.json) registers the local server.
-Open the repo in VS Code, open `.vscode/mcp.json`, and click **Start** on the `local-research-mcp`
-server. Then, in a Copilot **agent mode** chat, ask it to research a topic, e.g.:
+Open the repo in VS Code, open `.vscode/mcp.json`, and click **Start** on the `local-mining-mcp`
+server. Then, in a Copilot **agent mode** chat, ask it to mine, e.g.:
 
-> Research "Contoso Ltd" for me.
+> Mine some blocks for me.
 
-The agent calls `start_research`. With the defaults, the workflow finishes within the wait budget and
-the result comes back **inline** (status `completed`) — no polling needed.
+The agent calls `start_mining`. With the default difficulty, mining finishes within the wait budget
+and the result comes back **inline** (status `completed`) — no polling needed.
 
 ### Try the poll path
 
-Make the workflow outlive the wait budget by shrinking the budget and lengthening each source. Stop
-the host (Ctrl+C) and restart it with:
+Ask the agent to mine at a **higher difficulty** so the work outlives the wait budget:
 
-```bash
-cd src
-ResearchWaitBudgetSeconds=2 ResearchSourceDelaySeconds=5 dotnet run
-```
+> Mine some blocks at difficulty 25.
 
-Now ask the agent to research a topic again. This time `start_research` hits its 2s budget before the
-workflow finishes, so it returns status `running` with a `workflow_id` and a `next` instruction. The
-agent then calls `get_research_result` with that id — returning `running` until the work completes,
-then `completed` with the report.
+Now `start_mining` hits its budget before mining finishes, so it returns status `running` with a
+`workflow_id` and a `next` instruction. The agent then calls `get_mining_result` with that id —
+returning `running` until mining completes, then `completed` with the mined chain.
+
+> Mining time varies by machine and build (`dotnet run` is a Debug build). If difficulty 25 finishes
+> too fast or too slow, adjust the number up or down by 1–2.
 
 ## Configuration
 
 | Setting | Default | Purpose |
 |---------|---------|---------|
-| `ResearchWaitBudgetSeconds` | `20` | How long `start_research` blocks waiting for the workflow before returning a poll handle. Keep it **under the client's tool-call timeout**, not the Functions timeout. |
-| `ResearchSourceDelaySeconds` | `3` | Simulated per-source latency. The sources run sequentially, so the total workflow time is roughly this value times the number of sources. Raise it (or lower the budget) to demonstrate the poll path. |
+| `WaitBudgetSeconds` | `20` | How long `start_mining` blocks waiting for the workflow before returning a poll handle. Keep it **under the client's tool-call timeout**, not the Functions timeout. |
+| `MiningDifficulty` | `21` | Default mining difficulty (leading zero bits) when the tool's `difficulty` argument is omitted. Higher = longer. |
 
 Both are read from app settings / environment (see [`src/local.settings.json`](src/local.settings.json)).
+The `difficulty` tool argument overrides `MiningDifficulty` per request.
 
 ## How the result is shaped
 
@@ -149,8 +161,8 @@ sibling fields so nothing is lost:
 
 | `status` | Meaning | Agent's next move |
 |----------|---------|-------------------|
-| `completed` | Done; `result` holds the report. | Use the result. |
-| `running` | Still in flight (budget expired). | Wait `poll_after_seconds`, call `get_research_result`. |
+| `completed` | Done; `result` holds the mined chain. | Use the result. |
+| `running` | Still in flight (budget expired). | Wait `poll_after_seconds`, call `get_mining_result`. |
 | `failed` | Terminal: errored or terminated. `reason` + `error` give detail. | Stop polling; surface the error; optionally start over. |
 | `not_found` | No workflow for that id (bad/expired id). | Don't poll; start a new workflow. |
 
@@ -182,10 +194,10 @@ really an "error", so it isn't *labeled* one at the headline.
 
 ## A gotcha worth knowing
 
-The MCP tool-argument binding returns a **dashed GUID** to `get_research_result`. Durable's *default*
+The MCP tool-argument binding returns a **dashed GUID** to `get_mining_result`. Durable's *default*
 instance id is the dash-less form, so the default wouldn't match on lookup. This sample creates the
 orchestration with `Guid.NewGuid().ToString()` (dashed) so the ids match. See the comment in
-[`src/ResearchTools.cs`](src/ResearchTools.cs).
+[`src/MiningTools.cs`](src/MiningTools.cs).
 
 ## Contributing
 
