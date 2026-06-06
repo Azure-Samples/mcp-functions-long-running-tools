@@ -80,27 +80,49 @@ higher difficulty takes longer. That one dial is what lets you demonstrate both 
 | [`src/MiningTools.cs`](src/MiningTools.cs) | The two MCP tools and the shared status-mapping helper. |
 | [`src/MiningOrchestrator.cs`](src/MiningOrchestrator.cs) | The Durable proof-of-work orchestration. |
 | [`src/Program.cs`](src/Program.cs) | Isolated-worker host setup. |
-| [`src/host.json`](src/host.json) | Host config, including the MCP server name/instructions. |
+| [`src/host.json`](src/host.json) | Host config, including the MCP server name/instructions and the Durable Task Scheduler backend. |
 | [`.vscode/mcp.json`](.vscode/mcp.json) | Registers the local MCP server for VS Code. |
+| [`azure.yaml`](azure.yaml) | `azd` service definition that maps `src/` to the Azure Function App. |
+| [`infra/`](infra) | Bicep that `azd up` deploys: Flex Consumption Function App, user-assigned identity, storage, Log Analytics + App Insights, and a Durable Task Scheduler. |
+
+## Durable backend
+
+This sample uses the [**Durable Task Scheduler (DTS)**](https://learn.microsoft.com/azure/azure-functions/durable/durable-task-scheduler/durable-task-scheduler)
+as the Durable Functions backend (configured as the `azureManaged` storage provider in
+[`src/host.json`](src/host.json)). In Azure, `azd up` provisions a DTS resource and wires the
+connection into the Function App. Locally, you run the **DTS emulator** (see below). The app reads the
+connection from `DURABLE_TASK_SCHEDULER_CONNECTION_STRING` and the hub name from `TASKHUB_NAME`.
 
 ## Prerequisites
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download)
 - [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
+- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
+  for deploying to Azure.
+- [Docker](https://www.docker.com/) to run the Durable Task Scheduler emulator locally.
 - [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) storage emulator
-  (Durable Functions needs blob/queue/table storage locally). Install with `npm install -g azurite`.
+  (the Functions host still uses blob storage locally). Install with `npm install -g azurite`.
 - [VS Code](https://code.visualstudio.com/) with [GitHub Copilot](https://code.visualstudio.com/docs/copilot/overview)
   (agent mode) to call the tools as an MCP client.
 
 ## Run it locally
 
-**1. Start Azurite** (in its own terminal):
+**1. Start the Durable Task Scheduler emulator** (in its own terminal):
+
+```bash
+docker run -itP -p 8080:8080 -p 8082:8082 mcr.microsoft.com/dts/dts-emulator:latest
+```
+
+The emulator exposes the scheduler endpoint on `http://localhost:8080` (already configured in
+[`src/local.settings.json`](src/local.settings.json)) and a dashboard on `http://localhost:8082`.
+
+**2. Start Azurite** (in its own terminal):
 
 ```bash
 azurite --silent --location ./.azurite
 ```
 
-**2. Start the Functions host** (from the `src` folder):
+**3. Start the Functions host** (from the `src` folder):
 
 ```bash
 cd src
@@ -144,12 +166,38 @@ returning `running` until mining completes, then `completed` with the mined chai
 > Mining time varies by machine and build (`dotnet run` is a Debug build). If difficulty 25 finishes
 > too fast or too slow, adjust the number up or down by 1–2.
 
+## Deploy to Azure
+
+The repo includes [`azure.yaml`](azure.yaml) and Bicep under [`infra/`](infra), so it deploys with the
+[Azure Developer CLI](https://learn.microsoft.com/azure/developer/azure-developer-cli/):
+
+```bash
+azd up
+```
+
+`azd` prompts for an environment name, subscription, and region, then provisions a Flex Consumption
+Function App, a user-assigned managed identity, storage, Log Analytics + Application Insights, and a
+**Durable Task Scheduler**, and deploys the app. All access uses managed identity (no shared keys).
+
+When it finishes, the MCP endpoint is at
+`https://<function-app>.azurewebsites.net/runtime/webhooks/mcp`. The endpoint is **key-protected**, so
+clients must send the MCP extension's system key in the `x-functions-key` header. Retrieve it with:
+
+```bash
+az functionapp keys list -g <resource-group> -n <function-app> \
+  --query "systemKeys.mcp_extension" -o tsv
+```
+
+Tear everything down with `azd down`.
+
 ## Configuration
 
 | Setting | Default | Purpose |
 |---------|---------|---------|
 | `WaitBudgetSeconds` | `20` | How long `start_mining` blocks waiting for the workflow before returning a poll handle. Keep it **under the client's tool-call timeout**, not the Functions timeout. |
 | `MiningDifficulty` | `21` | Default mining difficulty (leading zero bits) when the tool's `difficulty` argument is omitted. Higher = longer. |
+| `DURABLE_TASK_SCHEDULER_CONNECTION_STRING` | DTS emulator locally | Connection to the Durable Task Scheduler. Set automatically in Azure by `azd`; points at the local emulator in [`src/local.settings.json`](src/local.settings.json). |
+| `TASKHUB_NAME` | `default` | Durable task hub name. Set automatically in Azure by `azd`. |
 
 Both are read from app settings / environment (see [`src/local.settings.json`](src/local.settings.json)).
 The `difficulty` tool argument overrides `MiningDifficulty` per request.

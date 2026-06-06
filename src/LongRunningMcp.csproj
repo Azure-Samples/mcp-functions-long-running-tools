@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <AzureFunctionsVersion>v4</AzureFunctionsVersion>
@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>LongRunningMcp</RootNamespace>
+    <UserSecretsId>8fda46e1-a709-435f-95f9-a80725425639</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,6 +28,9 @@
 
     <!-- Durable Functions: provides [DurableClient] + DurableTaskClient -->
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask" Version="1.16.5" />
+
+    <!-- Durable Task Scheduler (azureManaged) backend used in Azure; see host.json -->
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.DurableTask.AzureManaged" Version="1.6.0" />
   </ItemGroup>
 
   <ItemGroup>
