@@ -95,7 +95,7 @@ connection from `DURABLE_TASK_SCHEDULER_CONNECTION_STRING` and the hub name from
 
 ## Prerequisites
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
 - [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
   for deploying to Azure.
@@ -144,7 +144,7 @@ Functions:
 > The MCP endpoint uses the Streamable HTTP transport at
 > `http://localhost:7071/runtime/webhooks/mcp`.
 
-**3. Connect from VS Code.** [`.vscode/mcp.json`](.vscode/mcp.json) registers the local server.
+**4. Connect from VS Code.** [`.vscode/mcp.json`](.vscode/mcp.json) registers the local server.
 Open the repo in VS Code, open `.vscode/mcp.json`, and click **Start** on the `local-mining-mcp`
 server. Then, in a Copilot **agent mode** chat, ask it to mine, e.g.:
 
