@@ -1,0 +1,14 @@
+# CODEOWNERS for Azure-Samples/mcp-functions-long-running-tools
+# Owning team (Entra fallback: azurefunctions@microsoft.com / "Azure Functions Team")
+# Source: findings/governance-audit/governance-audit.csv (inferred_team: Azure Functions)
+
+# Default owner for everything
+*                       @Azure-Samples/azure-functions
+
+# Pipeline / CI / infra — require core-maintainer review
+/.github/               @Azure-Samples/azure-functions
+/.github/workflows/     @Azure-Samples/azure-functions
+*.yml                   @Azure-Samples/azure-functions
+*.yaml                  @Azure-Samples/azure-functions
+/infra/                 @Azure-Samples/azure-functions
+azure.yaml              @Azure-Samples/azure-functions
