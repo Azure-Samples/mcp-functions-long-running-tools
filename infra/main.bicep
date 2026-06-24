@@ -41,6 +41,15 @@ param dtsCapacity int = 1
 @description('Id of the user identity to be used for testing and debugging. This is not required in production. Leave empty if not needed.')
 param principalId string = deployer().objectId
 
+@description('How hard each block is to mine. Higher values take longer. Recommended: 24, so the default run outlasts wait budget, demonstrating long-running poll path.')
+@minValue(1)
+@maxValue(32)
+param miningDifficulty int
+
+@description('How many seconds start_mining waits inline before returning poll handle to caller. Keep it below your MCP client tool-call timeout (often ~30-60s). Recommended: 20.')
+@minValue(1)
+param waitBudgetSeconds int
+
 var abbrs = loadJsonContent('./abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var tags = { 'azd-env-name': environmentName }
@@ -103,8 +112,8 @@ module api './app/api.bicep' = {
     identityId: apiUserAssignedIdentity.outputs.resourceId
     identityClientId: apiUserAssignedIdentity.outputs.clientId
     appSettings: {
-      WaitBudgetSeconds: '20'
-      MiningDifficulty: '21'
+      WaitBudgetSeconds: '${waitBudgetSeconds}'
+      MiningDifficulty: '${miningDifficulty}'
     }
     virtualNetworkSubnetId: vnetEnabled ? serviceVirtualNetwork.outputs.appSubnetID : ''
     dtsURL: dts.outputs.dts_URL

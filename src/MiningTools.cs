@@ -33,7 +33,7 @@ public class MiningTools
 
         // Default mining difficulty (leading zero bits). Higher = longer. Callers can override it
         // per request via the tool's optional "difficulty" argument.
-        _defaultDifficulty = config.GetValue("MiningDifficulty", 21);
+        _defaultDifficulty = config.GetValue("MiningDifficulty", 24);
     }
 
     /// <summary>

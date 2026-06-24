@@ -441,3 +441,6 @@ __tablestorage__/
 
 # macOS
 .DS_Store
+
+# Transient host.json backup created by the azd package hooks
+host.json.bak
