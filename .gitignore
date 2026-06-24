@@ -438,3 +438,9 @@ __tablestorage__/
 
 # Keep the MCP server config for the sample
 !.vscode/mcp.json
+
+# macOS
+.DS_Store
+
+# Transient host.json backup created by the azd package hooks
+host.json.bak

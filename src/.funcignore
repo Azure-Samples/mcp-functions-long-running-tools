@@ -4,3 +4,5 @@
 bin
 obj
 local.settings.json
+host.dts.json
+host.json.bak
