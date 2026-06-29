@@ -86,12 +86,8 @@ demonstrate both the quick *inline* path and the slow *poll* path.
 **1. Start Azurite** (in its own terminal):
 
 ```bash
-azurite --silent --location ./.azurite
+azurite --skipApiVersionCheck --silent --location ./.azurite
 ```
-
-> If the host logs an Azurite "API version ... is not supported" error, your Azurite is older than
-> the storage API the Functions runtime requests. Upgrade Azurite (`npm install -g azurite@latest`),
-> or start it with `--skipApiVersionCheck`.
 
 **2. Start the Functions host** (from the `src` folder):
 
@@ -174,6 +170,16 @@ az functionapp keys list -g <resource-group> -n <function-app> \
 ```
 
 Tear everything down with `azd down`.
+
+### Enable built-in MCP authentication
+
+By default the deployed endpoint is **key-protected** (the `x-functions-key` header above). For a more
+secure, standards-based setup, you can enable **built-in MCP authentication** so clients connect using
+an OAuth flow backed by **Microsoft Entra ID** instead of a shared access key. This lets the agent
+authenticate as a user/identity rather than passing a static system key.
+
+Follow the steps in
+[Enable built-in MCP authentication in the Azure portal](https://learn.microsoft.com/azure/azure-functions/functions-mcp-tutorial?tabs=mcp-extension&pivots=programming-language-csharp#enable-built-in-mcp-authentication-in-azure-portal).
 
 ## Configuration
 
