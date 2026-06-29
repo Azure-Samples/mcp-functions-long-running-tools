@@ -19,6 +19,10 @@
       "storageProvider": {
         "type": "azureManaged",
         "connectionStringName": "DURABLE_TASK_SCHEDULER_CONNECTION_STRING"
+      },
+      "tracing": {
+        "DistributedTracingEnabled": true,
+        "Version": "V2"
       }
     }
   }
