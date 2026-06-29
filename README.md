@@ -20,10 +20,10 @@ client is willing to wait) by backing them with [Durable Functions](https://lear
 and a **budgeted start + poll** pattern. Durable Functions lets you write stateful, long-running workflows as ordinary code, orchestrating multiple function calls while the platform handles checkpointing, scaling, and recovery.
 
 > **Status: interim solution.** The MCP **Tasks extension**
-> ([SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663)) was recently
-> introduced in the [`2026-07-28` release candidate](https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/)
-> and is designed for long-running tool scenarios. It will take time before it's broadly supported
-> across the ecosystem, so until then we can use **Durable Functions** as an interim solution.
+> ([SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663)) was introduced
+> in the [`2026-07-28` release candidate](https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/)
+> for building long-running tools. However, until it's broadly supported in the ecosystem, we need a
+> solution today — and **Durable Functions** is a good fit here.
 
 ## The problem
 

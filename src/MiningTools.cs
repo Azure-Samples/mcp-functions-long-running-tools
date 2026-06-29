@@ -13,9 +13,9 @@ namespace LongRunningMcp;
 /// Two MCP tools that implement the "budgeted single call + poll fallback" pattern for
 /// long-running work, backed by a Durable Functions orchestration (a proof-of-work miner).
 ///
-/// The MCP Tasks extension (SEP-2663) was recently introduced in the 2026-07-28 release candidate
-/// and is designed for long-running tool scenarios. It will take time before it's broadly supported
-/// across the ecosystem, so until then this sample uses Durable Functions as an interim solution.
+/// The MCP Tasks extension (SEP-2663) was introduced in the 2026-07-28 release candidate for
+/// building long-running tools. However, until it's broadly supported in the ecosystem, we need a
+/// solution today -- and Durable Functions is a good fit here.
 /// </summary>
 public class MiningTools
 {
