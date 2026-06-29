@@ -52,31 +52,23 @@ Ordering is made robust by design: `workflow_id` is a **required** parameter of 
 > a second hop, but it's the core reason the MCP Task extension, where the SDK (not the model)
 > carries the handle, is the better long-term answer.
 
-## The example workflow: a proof-of-work miner
+## The example workflow: a blockchain-style miner
 
-The long-running work in this sample is a small, dependency-free **proof-of-work miner**. The
-orchestration mines a short chain of blocks. Each block needs a SHA-256 hash with at least
-`difficulty` leading zero bits (found by trying nonces `0, 1, 2, …`), and each block includes the
-previous block's hash, so the blocks form a chain. That makes it a natural example of Durable's
-[**function-chaining pattern**](https://learn.microsoft.com/azure/durable-task/common/durable-task-sequence?tabs=csharp&pivots=durable-functions),
-where each step depends on the output of the one before it.
+The long-running work in this sample is a small **miner**, the same idea behind blockchain
+**proof-of-work**, but with nothing crypto to learn. Here's the mechanic in plain terms: to "mine" a
+block, the system runs an input through a one-way math function (SHA-256) and checks whether the
+result matches a required pattern, i.e. starting with at least `difficulty` zeros. There's no
+shortcut, so the miner just keeps trying different inputs (`0, 1, 2, …`) until one happens to produce
+a result that fits. Lots of trial and error, which naturally takes time — a good stand-in for any
+real long-running job.
 
-Each extra bit roughly doubles the expected number of hashes, so higher difficulty takes longer.
+The miner builds a short *chain* of blocks, where each block's input includes the previous block's
+answer. Because every step depends on the one before it, this is a natural example of Durable's
+[**function-chaining pattern**](https://learn.microsoft.com/azure/durable-task/common/durable-task-sequence?tabs=csharp&pivots=durable-functions).
 
-## Durable backend: Azure Storage locally, DTS in Azure
-
-This sample uses two Durable Functions backends so local development stays lightweight while Azure
-gets a managed, scalable backend:
-
-- **Locally**, it uses the **Azure Storage** backend, served by the [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite)
-  emulator. This is the default in [`src/host.json`](src/host.json), so all you need locally is Azurite.
-- **In Azure**, it uses the [**Durable Task Scheduler (DTS)**](https://learn.microsoft.com/azure/durable-task/scheduler/durable-task-scheduler),
-  a managed backend that `azd up` provisions and connects via managed identity.
-
-The DTS configuration lives in [`src/host.dts.json`](src/host.dts.json). You don't switch backends by
-hand: `azd` package [hooks](azure.yaml) swap `host.dts.json` in for the deployment package and restore
-the local `host.json` afterward, so your working tree always runs on Azure Storage. The orchestration
-and MCP tool code are identical for both backends.
+The `difficulty` knob controls the runtime: each extra required zero roughly doubles the expected
+number of attempts, so higher difficulty takes longer. That single knob is what lets the sample
+demonstrate both the quick *inline* path and the slow *poll* path.
 
 ## Prerequisites
 
@@ -183,9 +175,6 @@ az functionapp keys list -g <resource-group> -n <function-app> \
 
 Tear everything down with `azd down`.
 
-> **Note:** If you have Docker installed, you can also use the [DTS emulator](https://learn.microsoft.com/azure/durable-task/scheduler/develop-with-durable-task-scheduler?tabs=dedicated&pivots=az-cli#durable-task-scheduler-emulator) for local
-> testing if prefer. All code remains identical regardless of backend; only configuration in `host.json` differs.
-
 ## Configuration
 
 | Setting | Default | Purpose |
@@ -212,6 +201,21 @@ sibling fields so nothing is lost:
 
 `Failed` and `Terminated` Durable states both map to `status: "failed"` because they drive the
 **same** agent action; the precise cause is preserved in `reason` (`error` / `terminated`).
+
+## Durable backend: Azure Storage locally, DTS in Azure
+
+This sample uses two Durable Functions backends so local development stays lightweight while Azure
+gets a managed, scalable backend:
+
+- **Locally**, it uses the **Azure Storage** backend, served by the [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite)
+  emulator. This is the default in [`src/host.json`](src/host.json), so all you need locally is Azurite.
+- **In Azure**, it uses the [**Durable Task Scheduler (DTS)**](https://learn.microsoft.com/azure/durable-task/scheduler/durable-task-scheduler),
+  a managed backend that `azd up` provisions and connects via managed identity.
+
+The DTS configuration lives in [`src/host.dts.json`](src/host.dts.json). You don't switch backends by
+hand: `azd` package [hooks](azure.yaml) swap `host.dts.json` in for the deployment package and restore
+the local `host.json` afterward, so your working tree always runs on Azure Storage. The orchestration
+and MCP tool code are identical for both backends.
 
 ## Q&A
 
