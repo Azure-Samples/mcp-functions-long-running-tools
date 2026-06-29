@@ -13,9 +13,10 @@ namespace LongRunningMcp;
 /// Two MCP tools that implement the "budgeted single call + poll fallback" pattern for
 /// long-running work, backed by a Durable Functions orchestration (a proof-of-work miner).
 ///
-/// This is a WORKAROUND until the MCP Task extension (SEP-2663) is supported by the Functions
-/// MCP trigger. Once tasks are native, the server can return a task handle and the client polls
-/// tasks/get via the SDK, making this two-tool pattern unnecessary.
+/// This is a WORKAROUND until the MCP Tasks extension (SEP-2663) is broadly supported across the
+/// ecosystem. Tasks was only recently introduced (in the 2026-07-28 release candidate), so clients
+/// and SDKs don't yet implement the Task lifecycle widely. Once they do, the server can return a
+/// task handle and the client polls tasks/get via the SDK, making this two-tool pattern unnecessary.
 /// </summary>
 public class MiningTools
 {

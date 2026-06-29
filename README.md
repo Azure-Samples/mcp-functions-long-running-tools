@@ -19,11 +19,15 @@ isolated) that shows how to run **long-running MCP tools** (tool calls that take
 client is willing to wait) by backing them with [Durable Functions](https://learn.microsoft.com/azure/azure-functions/durable/durable-functions-overview)
 and a **budgeted start + poll** pattern. Durable Functions lets you write stateful, long-running workflows as ordinary code, orchestrating multiple function calls while the platform handles checkpointing, scaling, and recovery.
 
-> **Status: workaround.** This pattern is a pragmatic bridge until the MCP **Task extension**
-> ([SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663)) is supported
-> by the Azure Functions MCP trigger. Once tasks are native and supported in the Functions extension, the protocol handles async itself (the
-> server returns `resultType: "task"` and the client polls `tasks/get` via the SDK), and this
-> two-tool pattern becomes unnecessary.
+> **Status: workaround.** This pattern is a pragmatic bridge until the MCP **Tasks extension**
+> ([SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663)) is broadly
+> supported across the ecosystem. Tasks was only recently introduced — in the
+> [`2026-07-28` release candidate](https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/),
+> where it graduates to an official extension — so clients and SDKs don't yet implement the Task
+> lifecycle widely. Until they do, there's little for the Azure Functions MCP trigger to integrate
+> against. Once the ecosystem catches up, the protocol handles async itself (the server returns
+> `resultType: "task"` and the client polls `tasks/get` via the SDK), and this two-tool pattern
+> becomes unnecessary.
 
 ## The problem
 
