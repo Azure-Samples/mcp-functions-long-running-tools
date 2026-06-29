@@ -151,7 +151,7 @@ azd up
 ```
 
 `azd` prompts for an environment name, subscription, and region, as well as the **mining difficulty**
-and **wait budget (seconds)** for the deployed app.
+(recommended value: 24) and **wait budget (seconds)** (recommended value: 20) for the deployed app.
 
 Durable Functions requires a storage backend to checkpoint execution progress. For local
 testing, the app uses Azure Storage. When deployed to Azure, it uses the [Durable Task Scheduler (DTS)](https://learn.microsoft.com/azure/durable-task/scheduler/durable-task-scheduler), which is the recommended backend.
