@@ -6,7 +6,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>LongRunningMcp</RootNamespace>
-    <UserSecretsId>8fda46e1-a709-435f-95f9-a80725425639</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
